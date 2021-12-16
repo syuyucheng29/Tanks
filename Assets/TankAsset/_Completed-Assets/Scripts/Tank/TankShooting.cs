@@ -23,9 +23,11 @@ namespace Complete
         private float m_ChargeSpeed;                // How fast the launch force increases, based on the max charge time.
         private bool m_Fired;                       // Whether or not the shell has been launched with this button press.
 
-        private string m_TurretAxisName;
-        private GameObject m_TurrentAnchors;    
-        public float m_TurnTurretSpeed = 120f;      // How fast the tank turns in degrees per second.
+        private string m_TurretAxisName;            // The name of the input axis for turning turret
+        private GameObject m_TurrentAnchors;        // A anchor of aimslider for precenting aim correctly
+        public float m_TurnTurretSpeed = 120f;      // How fast the tank turns in degrees per second
+        public float m_TurretAngleLimit = 60f;      // The maximum turning angle of turret.
+        private float m_TurretAngle = 0f;           // The current turning angle of turret.
         private GameObject m_Turret;                // Reference used to turn turrent.
         private float m_TurnTurretValue;            // The current value of the turn input.
 
@@ -42,7 +44,7 @@ namespace Complete
         }
 
 
-        private void Start ()
+        private void Start()
         {
             // The fire axis is based on the player number.
             m_FireButton = "Fire" + m_PlayerNumber;
@@ -54,7 +56,7 @@ namespace Complete
         }
 
 
-        private void Update ()
+        private void Update()
         {
             // The slider should have a default value of the minimum launch force.
             m_AimSlider.value = m_MinLaunchForce;
@@ -64,10 +66,10 @@ namespace Complete
             {
                 // ... use the max force and launch the shell.
                 m_CurrentLaunchForce = m_MaxLaunchForce;
-                Fire ();
+                Fire();
             }
             // Otherwise, if the fire button has just started being pressed...
-            else if (Input.GetButtonDown (m_FireButton))
+            else if (Input.GetButtonDown(m_FireButton))
             {
                 // ... reset the fired flag and reset the launch force.
                 m_Fired = false;
@@ -75,10 +77,10 @@ namespace Complete
 
                 // Change the clip to the charging clip and start it playing.
                 m_ShootingAudio.clip = m_ChargingClip;
-                m_ShootingAudio.Play ();
+                m_ShootingAudio.Play();
             }
             // Otherwise, if the fire button is being held and the shell hasn't been launched yet...
-            else if (Input.GetButton (m_FireButton) && !m_Fired)
+            else if (Input.GetButton(m_FireButton) && !m_Fired)
             {
                 // Increment the launch force and update the slider.
                 m_CurrentLaunchForce += m_ChargeSpeed * Time.deltaTime;
@@ -86,11 +88,13 @@ namespace Complete
                 m_AimSlider.value = m_CurrentLaunchForce;
             }
             // Otherwise, if the fire button is released and the shell hasn't been launched yet...
-            else if (Input.GetButtonUp (m_FireButton) && !m_Fired)
+            else if (Input.GetButtonUp(m_FireButton) && !m_Fired)
             {
                 // ... launch the shell.
-                Fire ();
+                Fire();
             }
+
+            // Adjust the turret angle
             m_TurnTurretValue = Input.GetAxis(m_TurretAxisName);
         }
 
@@ -103,29 +107,39 @@ namespace Complete
         {
             // Determine the number of degrees to be turned based on the input, speed and time between frames.
             float turn = m_TurnTurretValue * m_TurnTurretSpeed * Time.deltaTime;
+            m_TurretAngle += turn;
 
-            // Apply this rotation to the turret rotation and aimslider.
-            m_Turret.GetComponent<Transform>().Rotate(Vector3.up, turn);
-            m_TurrentAnchors.GetComponent<RectTransform>().Rotate(Vector3.back, turn);
+            if (Mathf.Abs(m_TurretAngle) > m_TurretAngleLimit)
+            {
+                // Fix maximum turret turning angle
+                m_TurretAngle = (m_TurretAngle>0)? m_TurretAngleLimit:-m_TurretAngleLimit;
+            }
+            else
+            {
+                // Apply this rotation to the turret rotation and aimslider
+                m_Turret.GetComponent<Transform>().Rotate(Vector3.up, turn);
+                m_TurrentAnchors.GetComponent<RectTransform>().Rotate(Vector3.back, turn);
+            }
+
         }
 
-        private void Fire ()
+        private void Fire()
         {
             // Set the fired flag so only Fire is only called once.
             m_Fired = true;
 
             // Create an instance of the shell and store a reference to it's rigidbody.
             Rigidbody shellInstance =
-                Instantiate (m_Shell, m_FireTransform.position, m_FireTransform.rotation) as Rigidbody;
+                Instantiate(m_Shell, m_FireTransform.position, m_FireTransform.rotation) as Rigidbody;
 
             photonView.RPC("FireOther", RpcTarget.Others, m_FireTransform.position, m_CurrentLaunchForce);
 
             // Set the shell's velocity to the launch force in the fire position's forward direction.
-            shellInstance.velocity = m_CurrentLaunchForce * m_FireTransform.forward; 
+            shellInstance.velocity = m_CurrentLaunchForce * m_FireTransform.forward;
 
             // Change the clip to the firing clip and play it.
             m_ShootingAudio.clip = m_FireClip;
-            m_ShootingAudio.Play ();
+            m_ShootingAudio.Play();
 
             // Reset the launch force.  This is a precaution in case of missing button events.
             m_CurrentLaunchForce = m_MinLaunchForce;
