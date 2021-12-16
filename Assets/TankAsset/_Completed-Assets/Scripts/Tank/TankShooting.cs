@@ -1,9 +1,10 @@
-﻿using UnityEngine;
+﻿using Photon.Pun;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace Complete
 {
-    public class TankShooting : MonoBehaviour
+    public class TankShooting : MonoBehaviourPunCallbacks
     {
         public int m_PlayerNumber = 1;              // Used to identify the different players.
         public Rigidbody m_Shell;                   // Prefab of the shell.
@@ -22,12 +23,22 @@ namespace Complete
         private float m_ChargeSpeed;                // How fast the launch force increases, based on the max charge time.
         private bool m_Fired;                       // Whether or not the shell has been launched with this button press.
 
+        private string m_TurretAxisName;
+        private GameObject m_TurrentAnchors;    
+        public float m_TurnTurretSpeed = 120f;      // How fast the tank turns in degrees per second.
+        private GameObject m_Turret;                // Reference used to turn turrent.
+        private float m_TurnTurretValue;            // The current value of the turn input.
 
         private void OnEnable()
         {
+            base.OnEnable();
             // When the tank is turned on, reset the launch force and the UI
             m_CurrentLaunchForce = m_MinLaunchForce;
             m_AimSlider.value = m_MinLaunchForce;
+
+            m_Turret = transform.FindAnyChild<Transform>("TankTurret").gameObject;
+            m_TurnTurretValue = 0f;
+            m_TurrentAnchors = transform.FindAnyChild<Transform>("TurretAnchor").gameObject;
         }
 
 
@@ -38,6 +49,8 @@ namespace Complete
 
             // The rate that the launch force charges up is the range of possible forces by the max charge time.
             m_ChargeSpeed = (m_MaxLaunchForce - m_MinLaunchForce) / m_MaxChargeTime;
+
+            m_TurretAxisName = "HorizontalTurret";
         }
 
 
@@ -78,8 +91,23 @@ namespace Complete
                 // ... launch the shell.
                 Fire ();
             }
+            m_TurnTurretValue = Input.GetAxis(m_TurretAxisName);
         }
 
+        void FixedUpdate()
+        {
+            TurnTurrent();
+        }
+
+        private void TurnTurrent()
+        {
+            // Determine the number of degrees to be turned based on the input, speed and time between frames.
+            float turn = m_TurnTurretValue * m_TurnTurretSpeed * Time.deltaTime;
+
+            // Apply this rotation to the turret rotation and aimslider.
+            m_Turret.GetComponent<Transform>().Rotate(Vector3.up, turn);
+            m_TurrentAnchors.GetComponent<RectTransform>().Rotate(Vector3.back, turn);
+        }
 
         private void Fire ()
         {
@@ -90,6 +118,8 @@ namespace Complete
             Rigidbody shellInstance =
                 Instantiate (m_Shell, m_FireTransform.position, m_FireTransform.rotation) as Rigidbody;
 
+            photonView.RPC("FireOther", RpcTarget.Others, m_FireTransform.position, m_CurrentLaunchForce);
+
             // Set the shell's velocity to the launch force in the fire position's forward direction.
             shellInstance.velocity = m_CurrentLaunchForce * m_FireTransform.forward; 
 
@@ -98,6 +128,16 @@ namespace Complete
             m_ShootingAudio.Play ();
 
             // Reset the launch force.  This is a precaution in case of missing button events.
+            m_CurrentLaunchForce = m_MinLaunchForce;
+        }
+
+        [PunRPC]
+        private void FireOther(Vector3 pos, float force)
+        {
+            m_Fired = true;
+
+            Rigidbody shellInstance = Instantiate(m_Shell, pos, m_FireTransform.rotation) as Rigidbody;
+            shellInstance.velocity = force * m_FireTransform.forward;
             m_CurrentLaunchForce = m_MinLaunchForce;
         }
     }
